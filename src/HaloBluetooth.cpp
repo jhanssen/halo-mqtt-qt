@@ -270,8 +270,8 @@ void HaloBluetooth::setColorTemperature(uint8_t deviceId, uint16_t temperature)
     QByteArray packet = QByteArray::fromHex("808073001D0000000100000000");
     packet[0] += deviceId;
     // big endian
-    packet[10] += tempBuf[1];
-    packet[11] += tempBuf[0];
+    packet[9] += tempBuf[1];
+    packet[10] += tempBuf[0];
     qDebug() << "wanting to write temperature" << packet.toHex();
 
     writePacket(packet);
