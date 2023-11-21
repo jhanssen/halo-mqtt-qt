@@ -19,6 +19,7 @@ HaloMqtt::HaloMqtt(const Options& options, QObject* parent)
     QObject::connect(mClient, &QMqttClient::connected, this, &HaloMqtt::mqttConnected);
     QObject::connect(mClient, &QMqttClient::disconnected, this, &HaloMqtt::mqttDisconnected);
     QObject::connect(mClient, &QMqttClient::errorChanged, this, &HaloMqtt::mqttErrorChanged);
+    QObject::connect(mClient, &QMqttClient::messageSent, this, &HaloMqtt::mqttMessageSent);
 }
 
 HaloMqtt::~HaloMqtt()
@@ -58,7 +59,8 @@ void HaloMqtt::publishDevice(const Device& device)
         return;
     }
 
-    mClient->publish(QString::fromUtf8(deviceTopic), discovery, 0, true);
+    auto id = mClient->publish(QString::fromUtf8(deviceTopic), discovery, 1, true);
+    mPendingSends.append(id);
 }
 
 void HaloMqtt::unpublishDevice(uint8_t deviceId)
@@ -71,7 +73,8 @@ void HaloMqtt::unpublishDevice(uint8_t deviceId)
         return;
     }
 
-    mClient->publish(QString::fromUtf8(deviceTopic), QByteArray(), 0, true);
+    auto id = mClient->publish(QString::fromUtf8(deviceTopic), QByteArray(), 1, true);
+    mPendingSends.append(id);
 }
 
 void HaloMqtt::publishDeviceState(uint8_t deviceId, uint8_t brightness, uint32_t temperature)
@@ -99,7 +102,8 @@ void HaloMqtt::publishDeviceState(uint8_t deviceId, uint8_t brightness, uint32_t
         return;
     }
 
-    mClient->publish(QString::fromUtf8(deviceTopic), state, 0, true);
+    auto id = mClient->publish(QString::fromUtf8(deviceTopic), state, 1, true);
+    mPendingSends.append(id);
 }
 
 void HaloMqtt::mqttConnected()
@@ -122,14 +126,17 @@ void HaloMqtt::mqttDisconnected()
 
     qDebug() << "mqtt disconnected";
 
+    mPendingSends.clear();
     mConnectBackoff = 0;
     reconnect();
 }
 
 void HaloMqtt::sendPendingPublishes()
 {
+    mPendingSends.reserve(mPendingSends.size() + mPendingPublish.size());
     for (const auto& to : mPendingPublish) {
-        mClient->publish(to.first, to.second, 0, true);
+        auto id = mClient->publish(to.first, to.second, 1, true);
+        mPendingSends.append(id);
     }
     mPendingPublish.clear();
 }
@@ -141,6 +148,20 @@ void HaloMqtt::reconnect()
     }
     mPendingConnect = true;
     mClient->connectToHost();
+}
+
+void HaloMqtt::mqttMessageSent(qint32 id)
+{
+    auto idx = mPendingSends.indexOf(id);
+    // qDebug() << "msg sent" << mPendingSends << id << idx;
+    if (idx == -1) {
+        // bad
+        return;
+    }
+    mPendingSends.remove(idx);
+    if (mPendingSends.isEmpty()) {
+        emit idle();
+    }
 }
 
 void HaloMqtt::mqttErrorChanged(QMqttClient::ClientError error)

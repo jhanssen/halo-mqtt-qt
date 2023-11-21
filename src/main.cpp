@@ -1,12 +1,53 @@
 #include <QCoreApplication.h>
+#include <QEvent>
 #include <cstdio>
 #include <cstdlib>
+#include <signal.h>
 #include "Args.h"
 #include "HaloManager.h"
 #include "Options.h"
 
+class QuitEvent : public QEvent
+{
+public:
+    QuitEvent()
+        : QEvent(static_cast<QEvent::Type>(QEvent::User + 1))
+    {
+    }
+};
+
+class QuitEventFilter : public QObject
+{
+public:
+    QuitEventFilter(HaloManager* manager, QObject* parent)
+        : QObject(parent), mManager(manager)
+    {
+    }
+
+protected:
+    virtual bool eventFilter(QObject* obj, QEvent* ev) override
+    {
+        if (ev->type() == QEvent::User + 1) {
+            qDebug() << "would like to quit";
+            mManager->quit();
+            return true;
+        }
+        return false;
+    }
+
+private:
+    HaloManager* mManager;
+};
+
+static void sigHandler(int sig)
+{
+    QCoreApplication::postEvent(QCoreApplication::instance(), new QuitEvent());
+}
+
 int main(int argc, char** argv, char** envp)
 {
+    signal(SIGINT, sigHandler);
+
     auto args = args::Parser::parse(argc, argv, envp, "HALO_", [](const char* msg, size_t offset, char* arg) {
         fprintf(stderr, "%s: %zu (%s)", msg, offset, arg);
         exit(1);
@@ -39,6 +80,7 @@ int main(int argc, char** argv, char** envp)
     }
 
     HaloManager haloMqtt(std::move(options));
+    app.installEventFilter(new QuitEventFilter(&haloMqtt, &app));
 
     return app.exec();
 }

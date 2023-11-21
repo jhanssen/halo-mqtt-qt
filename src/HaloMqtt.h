@@ -26,6 +26,7 @@ public:
     void publishDeviceState(uint8_t deviceId, uint8_t brightness, uint32_t temperature);
 
 signals:
+    void idle();
     void stateRequested(uint8_t deviceId, std::optional<uint8_t> brightness, std::optional<uint32_t> temperature);
 
 private slots:
@@ -33,6 +34,7 @@ private slots:
     void mqttDisconnected();
     void mqttMessageReceived(const QMqttMessage& message);
     void mqttErrorChanged(QMqttClient::ClientError error);
+    void mqttMessageSent(qint32 id);
     void reconnect();
 
 private:
@@ -49,6 +51,7 @@ private:
     QMqttSubscription* mSubscription = nullptr;
     QList<DeviceInfo> mInfos;
     QList<std::pair<QString, QByteArray>> mPendingPublish;
+    QList<qint32> mPendingSends;
     bool mConnected = false;
     bool mPendingConnect = false;
     uint32_t mConnectBackoff = 0;

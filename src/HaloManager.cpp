@@ -1,4 +1,5 @@
 #include "HaloManager.h"
+#include <QCoreApplication>
 #include <QList>
 #include <QFile>
 #include <QString>
@@ -33,12 +34,29 @@ HaloManager::HaloManager(Options&& options, QObject* parent)
 
     mMqtt = new HaloMqtt(mOptions);
     QObject::connect(mMqtt, &HaloMqtt::stateRequested, this, &HaloManager::mqttStateRequested);
+    QObject::connect(mMqtt, &HaloMqtt::idle, this, &HaloManager::mqttIdle);
     mMqtt->connect();
 }
 
 HaloManager::~HaloManager()
 {
     delete mBluetooth;
+}
+
+void HaloManager::quit()
+{
+    if (mQuitting) {
+        return;
+    }
+    mQuitting = true;
+    const auto location = mBluetooth->firstLocation();
+    if (location->devices.isEmpty()) {
+        QCoreApplication::instance()->quit();
+    } else {
+        for (const auto& dev : location->devices) {
+            mMqtt->unpublishDevice(dev.did);
+        }
+    }
 }
 
 void HaloManager::bluetoothReady()
@@ -70,6 +88,13 @@ void HaloManager::mqttStateRequested(uint8_t deviceId, std::optional<uint8_t> br
     }
     if (temperature.has_value()) {
         mBluetooth->setColorTemperature(deviceId, temperature.value());
+    }
+}
+
+void HaloManager::mqttIdle()
+{
+    if (mQuitting) {
+        QCoreApplication::instance()->quit();
     }
 }
 
