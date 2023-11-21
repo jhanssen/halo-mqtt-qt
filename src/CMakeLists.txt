@@ -9,9 +9,6 @@ set(SOURCES
 
 find_package(Qt6 REQUIRED COMPONENTS Bluetooth Core Network)
 
-get_target_property(_qmake_executable Qt6::qmake IMPORTED_LOCATION)
-get_filename_component(_qt_bin_dir "${_qmake_executable}" DIRECTORY)
-
 add_executable(halo-qt ${SOURCES})
 target_link_libraries(halo-qt PRIVATE Qt6::Bluetooth Qt6::Core Qt6::Network Qt6::Mqtt QtAES::QtAES)
 target_compile_features(halo-qt PRIVATE cxx_std_20)
