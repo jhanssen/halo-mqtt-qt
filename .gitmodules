@@ -1,0 +1,6 @@
+[submodule "3rdparty/Qt-AES"]
+	path = 3rdparty/Qt-AES
+	url = https://github.com/jhanssen/Qt-AES.git
+[submodule "3rdparty/qtmqtt"]
+	path = 3rdparty/qtmqtt
+	url = https://github.com/qt/qtmqtt.git
