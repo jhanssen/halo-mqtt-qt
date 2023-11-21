@@ -61,6 +61,10 @@ int main(int argc, char** argv, char** envp)
     options.mqttUser = args.value<QString>("mqtt-user");
     options.mqttPassword = args.value<QString>("mqtt-password");
     options.mqttHost = args.value<QString>("mqtt-host");
+    const auto mqttPort = args.value<int32_t>("mqtt-port", 1883);
+    if (mqttPort > 0 && mqttPort <= std::numeric_limits<uint16_t>::max()) {
+        options.mqttPort = static_cast<uint16_t>(mqttPort);
+    }
     const auto deviceDelay = args.value<int32_t>("device-delay", 1000);
     if (deviceDelay > 0) {
         options.deviceDelay = static_cast<uint32_t>(deviceDelay);

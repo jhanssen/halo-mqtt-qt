@@ -15,7 +15,7 @@ HaloMqtt::HaloMqtt(const Options& options, QObject* parent)
     mClient->setHostname(options.mqttHost);
     mClient->setUsername(options.mqttUser);
     mClient->setPassword(options.mqttPassword);
-    mClient->setPort(1883);
+    mClient->setPort(options.mqttPort);
     QObject::connect(mClient, &QMqttClient::connected, this, &HaloMqtt::mqttConnected);
     QObject::connect(mClient, &QMqttClient::disconnected, this, &HaloMqtt::mqttDisconnected);
     QObject::connect(mClient, &QMqttClient::errorChanged, this, &HaloMqtt::mqttErrorChanged);

@@ -10,5 +10,6 @@ struct Options
     QString mqttUser;
     QString mqttPassword;
     QString mqttHost;
+    uint16_t mqttPort;
     uint32_t deviceDelay;
 };
