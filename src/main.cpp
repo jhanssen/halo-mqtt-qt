@@ -64,10 +64,16 @@ int main(int argc, char** argv, char** envp)
     const auto mqttPort = args.value<int32_t>("mqtt-port", 1883);
     if (mqttPort > 0 && mqttPort <= std::numeric_limits<uint16_t>::max()) {
         options.mqttPort = static_cast<uint16_t>(mqttPort);
+    } else {
+        fprintf(stderr, "Invalid --mqtt-port %d", mqttPort);
+        exit(1);
     }
     const auto deviceDelay = args.value<int32_t>("device-delay", 1000);
     if (deviceDelay > 0) {
         options.deviceDelay = static_cast<uint32_t>(deviceDelay);
+    } else {
+        fprintf(stderr, "Invalid --device-delay %d", deviceDelay);
+        exit(1);
     }
 
     if (options.locations.isEmpty()) {
