@@ -74,6 +74,8 @@ inline bool Args::has(const QString& key) const
     }
     if (typeid(T) == typeid(float) && v.value().type() == typeid(double))
         return true;
+    if (typeid(T) == typeid(bool) && v.value().type() == typeid(int64_t))
+        return true;
     return false;
 }
 
@@ -97,7 +99,9 @@ inline T Args::value(const QString& key, T defaultValue) const
     if (v.value().type() == typeid(T))
         return std::any_cast<T>(v.value());
     if (typeid(T) == typeid(int32_t) && v.value().type() == typeid(int64_t))
-        return static_cast<int32_t>(std::any_cast<int64_t>(v.value()));
+        return static_cast<T>(std::any_cast<int64_t>(v.value()));
+    if (typeid(T) == typeid(bool) && v.value().type() == typeid(int64_t))
+        return static_cast<T>(std::any_cast<int64_t>(v.value()));
     return defaultValue;
 }
 
