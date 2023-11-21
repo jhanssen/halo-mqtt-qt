@@ -5,6 +5,8 @@
 
 namespace crypto {
 
+// ported indirectly from https://github.com/nkaminski/csrmesh/blob/29ebdb41654b349445b1a93eef2942ac1080f4f6/csrmesh/crypto.py
+
 QByteArray generateKey(const QByteArray& data)
 {
     QCryptographicHash hash(QCryptographicHash::Sha256);
