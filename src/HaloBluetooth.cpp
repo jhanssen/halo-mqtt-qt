@@ -5,8 +5,8 @@
 #include <QDebug>
 #include <cassert>
 
-HaloBluetooth::HaloBluetooth(Locations&& locations, QObject* parent)
-    : QObject(parent), mLocations(std::move(locations))
+HaloBluetooth::HaloBluetooth(Locations&& locations, QList<QBluetoothUuid>&& approved, QObject* parent)
+    : QObject(parent), mLocations(std::move(locations)), mApprovedDevices(std::move(approved))
 {
     mDiscoveryAgent = new QBluetoothDeviceDiscoveryAgent(this);
     connect(mDiscoveryAgent, &QBluetoothDeviceDiscoveryAgent::deviceDiscovered,
@@ -63,12 +63,19 @@ void HaloBluetooth::startDiscovery()
 
 void HaloBluetooth::addDevice(const QBluetoothDeviceInfo& info)
 {
-    auto it = std::find_if(mDevices.begin(), mDevices.end(),
-                           [&info](const auto& other) {
-                               return info.deviceUuid() == other.info.deviceUuid();
-                           });
-    if (it != mDevices.end()) {
+    auto dit = std::find_if(mDevices.begin(), mDevices.end(),
+                            [&info](const auto& other) {
+                                return info.deviceUuid() == other.info.deviceUuid();
+                            });
+    if (dit != mDevices.end()) {
         // already added?
+        return;
+    }
+
+    auto ait = std::find(mApprovedDevices.begin(), mApprovedDevices.end(), info.deviceUuid());
+    if (ait == mApprovedDevices.end()) {
+        // not approved
+        qDebug() << "device not approved" << info.deviceUuid();
         return;
     }
 

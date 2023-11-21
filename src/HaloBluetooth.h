@@ -16,7 +16,7 @@ class HaloBluetooth : public QObject
 public:
     enum class Error { PermissionError };
 
-    HaloBluetooth(Locations&& locations, QObject* parent);
+    HaloBluetooth(Locations&& locations, QList<QBluetoothUuid>&& approved, QObject* parent);
     ~HaloBluetooth();
 
     void initialize();
@@ -62,6 +62,7 @@ private:
     Locations mLocations;
     QRandomGenerator mRandom;
     QByteArray mKey;
+    QList<QBluetoothUuid> mApprovedDevices;
     QBluetoothDeviceDiscoveryAgent* mDiscoveryAgent = nullptr;
 
     QList<Device> mDevices;

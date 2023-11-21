@@ -16,12 +16,16 @@ int main(int argc, char** argv, char** envp)
 
     Options options;
     options.locations = args.value<QString>("locations");
+    options.devices = args.value<QString>("devices");
     options.mqttUser = args.value<QString>("mqtt-user");
     options.mqttPassword = args.value<QString>("mqtt-password");
     options.mqttHost = args.value<QString>("mqtt-host");
 
     if (options.locations.isEmpty()) {
         fprintf(stderr, "No --locations\n");
+        exit(1);
+    } else if (options.devices.isEmpty()) {
+        fprintf(stderr, "No --devices\n");
         exit(1);
     } else if (options.mqttUser.isEmpty()) {
         fprintf(stderr, "No --mqtt-user\n");
