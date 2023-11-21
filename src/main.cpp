@@ -61,6 +61,10 @@ int main(int argc, char** argv, char** envp)
     options.mqttUser = args.value<QString>("mqtt-user");
     options.mqttPassword = args.value<QString>("mqtt-password");
     options.mqttHost = args.value<QString>("mqtt-host");
+    const auto deviceDelay = args.value<int32_t>("device-delay", 1000);
+    if (deviceDelay > 0) {
+        options.deviceDelay = static_cast<uint32_t>(deviceDelay);
+    }
 
     if (options.locations.isEmpty()) {
         fprintf(stderr, "No --locations\n");

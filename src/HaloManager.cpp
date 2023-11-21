@@ -26,7 +26,7 @@ inline QList<QBluetoothUuid> uuidsFromFile(const QString& fn)
 HaloManager::HaloManager(Options&& options, QObject* parent)
     : QObject(parent), mOptions(std::move(options))
 {
-    mBluetooth = new HaloBluetooth(locationsFromFile(mOptions.locations), uuidsFromFile(mOptions.devices), this);
+    mBluetooth = new HaloBluetooth(mOptions.deviceDelay, locationsFromFile(mOptions.locations), uuidsFromFile(mOptions.devices), this);
     QObject::connect(mBluetooth, &HaloBluetooth::ready, this, &HaloManager::bluetoothReady);
     QObject::connect(mBluetooth, &HaloBluetooth::error, this, &HaloManager::bluetoothError);
     QObject::connect(mBluetooth, &HaloBluetooth::devicesReady, this, &HaloManager::devicesReady);
@@ -54,7 +54,7 @@ void HaloManager::quit()
         QCoreApplication::instance()->quit();
     } else {
         for (const auto& dev : location->devices) {
-            mMqtt->unpublishDevice(dev.did);
+            mMqtt->unpublishDevice(location->id, dev.did);
         }
     }
 }
@@ -76,13 +76,14 @@ void HaloManager::devicesReady()
     for (const auto& dev : location->devices) {
         // mBluetooth->setBrightness(dev.did, 200);
         // mBluetooth->setColorTemperature(dev.did, 5000);
-        mMqtt->publishDevice(dev);
-        mMqtt->publishDeviceState(dev.did, 200, 5000);
+        mMqtt->publishDevice(location->id, dev);
+        mMqtt->publishDeviceState(location->id, dev.did, 200, 5000);
     }
 }
 
-void HaloManager::mqttStateRequested(uint8_t deviceId, std::optional<uint8_t> brightness, std::optional<uint32_t> temperature)
+void HaloManager::mqttStateRequested(uint32_t locationId, uint8_t deviceId, std::optional<uint8_t> brightness, std::optional<uint32_t> temperature)
 {
+    Q_UNUSED(locationId);
     if (brightness.has_value()) {
         mBluetooth->setBrightness(deviceId, brightness.value());
     }

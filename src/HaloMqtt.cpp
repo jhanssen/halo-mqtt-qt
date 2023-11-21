@@ -32,13 +32,13 @@ void HaloMqtt::connect()
     mClient->connectToHost();
 }
 
-void HaloMqtt::publishDevice(const Device& device)
+void HaloMqtt::publishDevice(uint32_t locationId, const Device& device)
 {
     if (device.did >= mInfos.size()) {
         mInfos.resize(device.did + 1);
     }
 
-    const QByteArray baDeviceId = devicePrefix + QByteArray::number(device.did);
+    const QByteArray baDeviceId = devicePrefix + QByteArray::number(locationId) + '_' + QByteArray::number(device.did);
     const QByteArray discovery =
     "{\"name\":\"" + device.name.toUtf8() + "\","
     "\"command_topic\":\"" + QByteArray(commandTopic) + "/" + baDeviceId + "\","
@@ -63,9 +63,9 @@ void HaloMqtt::publishDevice(const Device& device)
     mPendingSends.append(id);
 }
 
-void HaloMqtt::unpublishDevice(uint8_t deviceId)
+void HaloMqtt::unpublishDevice(uint32_t locationId, uint8_t deviceId)
 {
-    const QByteArray baDeviceId = devicePrefix + QByteArray::number(deviceId);
+    const QByteArray baDeviceId = devicePrefix + QByteArray::number(locationId) + '_' + QByteArray::number(deviceId);
     const QByteArray deviceTopic = "homeassistant/light/" + baDeviceId + "/config";
     if (!mConnected) {
         mPendingPublish.append(std::make_pair(QString::fromUtf8(deviceTopic), QByteArray()));
@@ -77,9 +77,9 @@ void HaloMqtt::unpublishDevice(uint8_t deviceId)
     mPendingSends.append(id);
 }
 
-void HaloMqtt::publishDeviceState(uint8_t deviceId, uint8_t brightness, uint32_t temperature)
+void HaloMqtt::publishDeviceState(uint32_t locationId, uint8_t deviceId, uint8_t brightness, uint32_t temperature)
 {
-    const QByteArray baDeviceId = devicePrefix + QByteArray::number(deviceId);
+    const QByteArray baDeviceId = devicePrefix + QByteArray::number(locationId) + '_' + QByteArray::number(deviceId);
     const QByteArray state =
     "{\"state\":\"" + QByteArray(brightness > 0 ? "ON" : "OFF") + "\","
     "\"color_temp\":" + QByteArray::number(static_cast<uint32_t>(1000000.f / temperature)) + ","
@@ -180,24 +180,46 @@ void HaloMqtt::mqttMessageReceived(const QMqttMessage& message)
 {
     auto doc = QJsonDocument::fromJson(message.payload());
     if (doc.isObject()) {
-        // parse device id from topic name
+        // parse location and device ids from topic name
         static const QByteArray baDeviceTopic = QByteArray(commandTopic) + "/" + devicePrefix;
         const auto topic = message.topic().name().toUtf8();
         if (!topic.startsWith(baDeviceTopic)) {
             // not for us
             return;
         }
-        bool ok;
-        const auto deviceId = QByteArrayView(topic.constData() + baDeviceTopic.size(), topic.constData() + topic.size()).toInt(&ok);
-        if (!ok) {
-            // failed to parse
+
+        const auto underscore = topic.indexOf('_', baDeviceTopic.size());
+        if (underscore == -1) {
+            // nope
             return;
         }
-        if (deviceId < 0 || deviceId > 255 || deviceId >= mInfos.size()) {
-            qDebug() << "unknown device" << deviceId;
+
+        const QByteArrayView locationView(topic.constData() + baDeviceTopic.size(), topic.constData() + underscore);
+        const QByteArrayView deviceView(topic.constData() + underscore + 1, topic.constData() + topic.size());
+
+        bool ok;
+        const auto locationId = locationView.toInt(&ok);
+        if (!ok) {
+            // nope
+            return;
+        }
+        const auto deviceId = deviceView.toInt(&ok);
+        if (!ok) {
+            // nope
+            return;
         }
 
-        qDebug() << "device" << deviceId;
+        if (locationId < 0) {
+            qDebug() << "unknown location" << locationId;
+            return;
+        }
+
+        if (deviceId < 0 || deviceId > 255 || deviceId >= mInfos.size()) {
+            qDebug() << "unknown device" << deviceId;
+            return;
+        }
+
+        qDebug() << "device" << locationId << deviceId;
 
         auto msgobj = doc.object();
         std::optional<bool> state;
@@ -228,8 +250,8 @@ void HaloMqtt::mqttMessageReceived(const QMqttMessage& message)
         if (colorTemp.has_value()) {
             info.colorTemp = colorTemp.value();
         }
-
-        emit stateRequested(static_cast<uint8_t>(deviceId), brightness, colorTemp);
+        publishDeviceState(static_cast<uint32_t>(locationId), static_cast<uint8_t>(deviceId), info.brightness, info.colorTemp);
+        emit stateRequested(static_cast<uint32_t>(locationId), static_cast<uint8_t>(deviceId), brightness, colorTemp);
     }
 }
 

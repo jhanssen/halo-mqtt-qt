@@ -16,7 +16,7 @@ class HaloBluetooth : public QObject
 public:
     enum class Error { PermissionError };
 
-    HaloBluetooth(Locations&& locations, QList<QBluetoothUuid>&& approved, QObject* parent);
+    HaloBluetooth(uint32_t deviceDelay, Locations&& locations, QList<QBluetoothUuid>&& approved, QObject* parent);
     ~HaloBluetooth();
 
     void initialize();
@@ -46,9 +46,12 @@ private slots:
     void serviceErrorOccurred(QLowEnergyService::ServiceError error);
     void serviceStateChanged(QLowEnergyService::ServiceState state);
 
+private slots:
+    void writeNextPacket();
+
 private:
+    void writePacketInternal(const QByteArray& packet);
     void writePacket(const QByteArray& packet);
-    bool writePacket(const QBluetoothUuid& uuid, const QByteArray& packet);
     void addDevice(const QBluetoothDeviceInfo& info);
     uint32_t randomSeq();
 
@@ -62,10 +65,11 @@ private:
         bool connected = false, ready = false;
     };
 
-    bool writePacket(InternalDevice* device, const QByteArray& packet);
     void writePendingPackets();
+    void scheduleNextPacket();
 
 private:
+    uint32_t mDeviceDelay;
     Locations mLocations;
     QRandomGenerator mRandom;
     QByteArray mKey;
@@ -73,6 +77,7 @@ private:
     QBluetoothDeviceDiscoveryAgent* mDiscoveryAgent = nullptr;
     QList<InternalDevice> mDevices;
     QList<QByteArray> mPendingPackets;
+    bool mWritingPacket = false, mScheduledPacket = false;
 };
 
 inline const Locations& HaloBluetooth::locations() const

@@ -20,14 +20,13 @@ public:
 
     void connect();
 
-    void publishDevice(const Device& device);
-    void unpublishDevice(uint8_t deviceId);
-
-    void publishDeviceState(uint8_t deviceId, uint8_t brightness, uint32_t temperature);
+    void publishDevice(uint32_t locationId, const Device& device);
+    void unpublishDevice(uint32_t locationId, uint8_t deviceId);
+    void publishDeviceState(uint32_t locationId, uint8_t deviceId, uint8_t brightness, uint32_t temperature);
 
 signals:
     void idle();
-    void stateRequested(uint8_t deviceId, std::optional<uint8_t> brightness, std::optional<uint32_t> temperature);
+    void stateRequested(uint32_t locationId, uint8_t deviceId, std::optional<uint8_t> brightness, std::optional<uint32_t> temperature);
 
 private slots:
     void mqttConnected();

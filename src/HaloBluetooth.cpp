@@ -2,12 +2,14 @@
 #include "Crypto.h"
 #include <QCoreApplication.h>
 #include <QPermissions>
+#include <QTimer>
 #include <QDebug>
 #include <cassert>
 
-HaloBluetooth::HaloBluetooth(Locations&& locations, QList<QBluetoothUuid>&& approved, QObject* parent)
-    : QObject(parent), mLocations(std::move(locations)), mApprovedDevices(std::move(approved))
+HaloBluetooth::HaloBluetooth(uint32_t deviceDelay, Locations&& locations, QList<QBluetoothUuid>&& approved, QObject* parent)
+    : QObject(parent), mDeviceDelay(deviceDelay), mLocations(std::move(locations)), mApprovedDevices(std::move(approved))
 {
+    qDebug() << "device delay" << mDeviceDelay;
     mDiscoveryAgent = new QBluetoothDeviceDiscoveryAgent(this);
     connect(mDiscoveryAgent, &QBluetoothDeviceDiscoveryAgent::deviceDiscovered,
             this, &HaloBluetooth::deviceDiscovered);
@@ -282,53 +284,59 @@ uint32_t HaloBluetooth::randomSeq()
     return mRandom.bounded(1, 16777215);
 }
 
-bool HaloBluetooth::writePacket(InternalDevice* device, const QByteArray& packet)
-{
-    if (!device->ready) {
-        return false;
-    }
-    if (!device->low.isValid() || !device->high.isValid()) {
-        //qDebug() << "characteristic not valid" << device->low.isValid() << device->high.isValid();
-        return false;
-    }
-
-    const auto& csrpacket = crypto::makePacket(mKey, randomSeq(), packet);
-    const auto& csrlow = csrpacket.mid(0, 20);
-    const auto& csrhigh = csrpacket.mid(20);
-
-    // qDebug() << "writing csr" << csrpacket.size();
-    device->service->writeCharacteristic(device->low, csrlow, QLowEnergyService::WriteWithoutResponse);
-    device->service->writeCharacteristic(device->high, csrhigh, QLowEnergyService::WriteWithoutResponse);
-    return true;
-}
-
-bool HaloBluetooth::writePacket(const QBluetoothUuid& uuid, const QByteArray& packet)
-{
-    auto it = std::find_if(mDevices.begin(), mDevices.end(),
-                           [&uuid](const auto& other) {
-                               return uuid == other.info.deviceUuid();
-                           });
-    if (it == mDevices.end()) {
-        qDebug() << "no device to write to";
-        return false;
-    }
-
-    return writePacket(&*it, packet);
-}
-
 void HaloBluetooth::writePendingPackets()
 {
-    for (const auto& packet : mPendingPackets) {
-        for (auto& dev : mDevices) {
-            if (dev.ready) {
-                writePacket(&dev, packet);
-            } else {
-                // shouldn't happen
-                return;
-            }
-        }
+    QList<QByteArray> pendingPackets;
+    std::swap(pendingPackets, mPendingPackets);
+    for (const auto& packet : pendingPackets) {
+        writePacket(packet);
     }
-    mPendingPackets.clear();
+}
+
+void HaloBluetooth::scheduleNextPacket()
+{
+    if (mScheduledPacket) {
+        return;
+    }
+    mScheduledPacket = true;
+    QTimer::singleShot(mDeviceDelay, this, &HaloBluetooth::writeNextPacket);
+}
+
+void HaloBluetooth::writeNextPacket()
+{
+    mWritingPacket = false;
+    mScheduledPacket = false;
+    if (mPendingPackets.isEmpty()) {
+        return;
+    }
+    // this is not pretty
+    QList<QByteArray> pendingPackets;
+    std::swap(pendingPackets, mPendingPackets);
+    for (const auto& packet : pendingPackets) {
+        writePacket(packet);
+    }
+}
+
+void HaloBluetooth::writePacketInternal(const QByteArray& packet)
+{
+    //qDebug() << "num devices" << mDevices.size();
+    for (auto& device : mDevices) {
+        if (!device.ready) {
+            return;
+        }
+        if (!device.low.isValid() || !device.high.isValid()) {
+            //qDebug() << "characteristic not valid" << device.low.isValid() << device.high.isValid();
+            return;
+        }
+
+        const auto& csrpacket = crypto::makePacket(mKey, randomSeq(), packet);
+        const auto& csrlow = csrpacket.mid(0, 20);
+        const auto& csrhigh = csrpacket.mid(20);
+
+        // qDebug() << "writing csr" << csrpacket.size();
+        device.service->writeCharacteristic(device.low, csrlow, QLowEnergyService::WriteWithoutResponse);
+        device.service->writeCharacteristic(device.high, csrhigh, QLowEnergyService::WriteWithoutResponse);
+    }
 }
 
 void HaloBluetooth::writePacket(const QByteArray& packet)
@@ -343,15 +351,15 @@ void HaloBluetooth::writePacket(const QByteArray& packet)
             allReady = false;
         }
     }
-    if (!allReady) {
+    if (!allReady || mWritingPacket) {
         mPendingPackets.append(packet);
+        if (allReady) {
+            scheduleNextPacket();
+        }
         return;
     }
-
-    //qDebug() << "num devices" << mDevices.size();
-    for (auto& device : mDevices) {
-        writePacket(&device, packet);
-    }
+    mWritingPacket = true;
+    writePacketInternal(packet);
 }
 
 #include "moc_HaloBluetooth.cpp"
