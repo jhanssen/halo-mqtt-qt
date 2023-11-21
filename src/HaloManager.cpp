@@ -40,6 +40,7 @@ HaloManager::HaloManager(Options&& options, QObject* parent)
 
 HaloManager::~HaloManager()
 {
+    delete mMqtt;
     delete mBluetooth;
 }
 
