@@ -1,4 +1,4 @@
-#include "HaloMqtt.h"
+#include "HaloManager.h"
 #include <QList>
 #include <QFile>
 #include <QString>
@@ -22,35 +22,38 @@ inline QList<QBluetoothUuid> uuidsFromFile(const QString& fn)
     return uuids;
 }
 
-HaloMqtt::HaloMqtt(Options&& options, QObject* parent)
+HaloManager::HaloManager(Options&& options, QObject* parent)
     : QObject(parent), mOptions(std::move(options))
 {
     mBluetooth = new HaloBluetooth(locationsFromFile(mOptions.locations), uuidsFromFile(mOptions.devices), this);
-    QObject::connect(mBluetooth, &HaloBluetooth::ready, this, &HaloMqtt::bluetoothReady);
-    QObject::connect(mBluetooth, &HaloBluetooth::error, this, &HaloMqtt::bluetoothError);
-    QObject::connect(mBluetooth, &HaloBluetooth::deviceReady, this, &HaloMqtt::deviceReady);
+    QObject::connect(mBluetooth, &HaloBluetooth::ready, this, &HaloManager::bluetoothReady);
+    QObject::connect(mBluetooth, &HaloBluetooth::error, this, &HaloManager::bluetoothError);
+    QObject::connect(mBluetooth, &HaloBluetooth::devicesReady, this, &HaloManager::devicesReady);
     mBluetooth->initialize();
 }
 
-HaloMqtt::~HaloMqtt()
+HaloManager::~HaloManager()
 {
     delete mBluetooth;
 }
 
-void HaloMqtt::bluetoothReady()
+void HaloManager::bluetoothReady()
 {
     mBluetooth->startDiscovery();
 }
 
-void HaloMqtt::bluetoothError(HaloBluetooth::Error error)
+void HaloManager::bluetoothError(HaloBluetooth::Error error)
 {
     fprintf(stderr, "bluetooth error 0x%x", static_cast<uint32_t>(error));
 }
 
-void HaloMqtt::deviceReady(const QBluetoothDeviceInfo& info)
+void HaloManager::devicesReady()
 {
-    qDebug() << "device is ready" << info.deviceUuid();
-    mBluetooth->setBrightness(0, 0);
+    qDebug() << "devices are ready";
+    const auto location = mBluetooth->firstLocation();
+    for (const auto& dev : location->devices) {
+        mBluetooth->setBrightness(dev.did, 200);
+    }
 }
 
-#include "moc_HaloMqtt.cpp"
+#include "moc_HaloManager.cpp"

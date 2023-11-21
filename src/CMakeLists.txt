@@ -2,7 +2,7 @@ set(SOURCES
     main.cpp
     Crypto.cpp
     HaloBluetooth.cpp
-    HaloMqtt.cpp
+    HaloManager.cpp
     Locations.cpp
 )
 

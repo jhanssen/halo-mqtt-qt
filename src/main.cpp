@@ -2,7 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "Args.h"
-#include "HaloMqtt.h"
+#include "HaloManager.h"
 #include "Options.h"
 
 int main(int argc, char** argv, char** envp)
@@ -38,7 +38,7 @@ int main(int argc, char** argv, char** envp)
         exit(1);
     }
 
-    HaloMqtt haloMqtt(std::move(options));
+    HaloManager haloMqtt(std::move(options));
 
     return app.exec();
 }

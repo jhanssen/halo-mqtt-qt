@@ -22,14 +22,18 @@ public:
     void initialize();
     void startDiscovery();
 
+    const Locations& locations() const;
+    const Location* firstLocation() const;
+
 signals:
     void error(Error error);
     void ready();
 
-    void deviceReady(const QBluetoothDeviceInfo& info);
+    void devicesReady();
 
 public slots:
     void setBrightness(uint8_t deviceId, uint8_t brightness);
+    void setColorTemperature(uint8_t deviceId, uint16_t temperature);
 
 private slots:
     void deviceDiscovered(const QBluetoothDeviceInfo& info);
@@ -44,19 +48,22 @@ private slots:
 
 private:
     void writePacket(const QByteArray& packet);
-    void writePacket(const QBluetoothUuid& uuid, const QByteArray& packet);
+    bool writePacket(const QBluetoothUuid& uuid, const QByteArray& packet);
     void addDevice(const QBluetoothDeviceInfo& info);
     uint32_t randomSeq();
 
-    struct Device
+    struct InternalDevice
     {
         QBluetoothDeviceInfo info;
         QLowEnergyController* controller = nullptr;
         QLowEnergyService* service = nullptr;
         QLowEnergyCharacteristic low = {}, high = {};
+        uint32_t connectCount = 0;
+        bool connected = false, ready = false;
     };
 
-    void writePacket(Device* device, const QByteArray& packet);
+    bool writePacket(InternalDevice* device, const QByteArray& packet);
+    void writePendingPackets();
 
 private:
     Locations mLocations;
@@ -64,6 +71,19 @@ private:
     QByteArray mKey;
     QList<QBluetoothUuid> mApprovedDevices;
     QBluetoothDeviceDiscoveryAgent* mDiscoveryAgent = nullptr;
-
-    QList<Device> mDevices;
+    QList<InternalDevice> mDevices;
+    QList<QByteArray> mPendingPackets;
 };
+
+inline const Locations& HaloBluetooth::locations() const
+{
+    return mLocations;
+}
+
+inline const Location* HaloBluetooth::firstLocation() const
+{
+    if (mLocations.isEmpty()) {
+        return nullptr;
+    }
+    return &mLocations[0];
+}

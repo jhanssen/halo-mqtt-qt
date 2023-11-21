@@ -79,12 +79,8 @@ void HaloBluetooth::addDevice(const QBluetoothDeviceInfo& info)
         return;
     }
 
-    Device dev = {
+    InternalDevice dev = {
         info,
-        nullptr,
-        nullptr,
-        {},
-        {}
     };
 
     dev.controller = QLowEnergyController::createCentral(info, this);
@@ -103,20 +99,44 @@ void HaloBluetooth::addDevice(const QBluetoothDeviceInfo& info)
 
 void HaloBluetooth::deviceConnected()
 {
-    // qDebug() << "device connected";
-
     auto controller = static_cast<QLowEnergyController*>(sender());
     controller->discoverServices();
+
+    auto it = std::find_if(mDevices.begin(), mDevices.end(),
+                           [controller](const auto& other) {
+                               return controller == other.controller;
+                           });
+    if (it == mDevices.end()) {
+        qDebug() << "no device for connected?";
+        return;
+    }
+
+    ++it->connectCount;
+    it->connected = true;
 }
 
 void HaloBluetooth::deviceDisconnected()
 {
-    //qDebug() << "device disconnected";
+    auto controller = static_cast<QLowEnergyController*>(sender());
+    qDebug() << "device disconnected" << controller->remoteDeviceUuid();
+
+    auto it = std::find_if(mDevices.begin(), mDevices.end(),
+                           [controller](const auto& other) {
+                               return controller == other.controller;
+                           });
+    if (it == mDevices.end()) {
+        qDebug() << "no device for disconnected?";
+        return;
+    }
+
+    it->ready = it->connected = false;
+    it->service->deleteLater();
+    it->service = nullptr;
 }
 
 void HaloBluetooth::deviceErrorOccurred(QLowEnergyController::Error error)
 {
-    //qDebug() << "device error" << error;
+    qDebug() << "device error" << error;
 }
 
 void HaloBluetooth::deviceServiceDiscovered(const QBluetoothUuid& service)
@@ -174,7 +194,7 @@ void HaloBluetooth::serviceDescriptorWritten(const QLowEnergyDescriptor& descrip
 
 void HaloBluetooth::serviceErrorOccurred(QLowEnergyService::ServiceError error)
 {
-    // qDebug() << "service error" << error;
+    qDebug() << "service error" << error;
 }
 
 void HaloBluetooth::serviceStateChanged(QLowEnergyService::ServiceState state)
@@ -205,8 +225,25 @@ void HaloBluetooth::serviceStateChanged(QLowEnergyService::ServiceState state)
         if (low.isValid() && high.isValid()) {
             it->low = low;
             it->high = high;
+            it->ready = true;
+            qDebug() << "device ready" << it->info.deviceUuid();
 
-            emit deviceReady(it->info);
+            if (mDevices.size() == firstLocation()->devices.size()) {
+                bool allReady = true;
+                for (const auto& dev : mDevices) {
+                    if (!dev.ready) {
+                        allReady = false;
+                        break;
+                    }
+                }
+                if (allReady) {
+                    writePendingPackets();
+                    // can this get to >1 if the device disconnects during initialization?
+                    if (it->connectCount == 1) {
+                        emit devicesReady();
+                    }
+                }
+            }
         }
         // qDebug() << "service discovered" << service << low.isValid() << high.isValid();
         break; }
@@ -225,16 +262,34 @@ void HaloBluetooth::setBrightness(uint8_t deviceId, uint8_t brightness)
     writePacket(packet);
 }
 
+void HaloBluetooth::setColorTemperature(uint8_t deviceId, uint16_t temperature)
+{
+    uint8_t tempBuf[2];
+    memcpy(tempBuf, &temperature, 2);
+
+    QByteArray packet = QByteArray::fromHex("808073001D0000000100000000");
+    packet[0] += deviceId;
+    // big endian
+    packet[10] += tempBuf[1];
+    packet[11] += tempBuf[0];
+    qDebug() << "wanting to write temperature" << packet.toHex();
+
+    writePacket(packet);
+}
+
 uint32_t HaloBluetooth::randomSeq()
 {
     return mRandom.bounded(1, 16777215);
 }
 
-void HaloBluetooth::writePacket(Device* device, const QByteArray& packet)
+bool HaloBluetooth::writePacket(InternalDevice* device, const QByteArray& packet)
 {
+    if (!device->ready) {
+        return false;
+    }
     if (!device->low.isValid() || !device->high.isValid()) {
-        qDebug() << "characteristic not valid" << device->low.isValid() << device->high.isValid();
-        return;
+        //qDebug() << "characteristic not valid" << device->low.isValid() << device->high.isValid();
+        return false;
     }
 
     const auto& csrpacket = crypto::makePacket(mKey, randomSeq(), packet);
@@ -244,9 +299,10 @@ void HaloBluetooth::writePacket(Device* device, const QByteArray& packet)
     // qDebug() << "writing csr" << csrpacket.size();
     device->service->writeCharacteristic(device->low, csrlow, QLowEnergyService::WriteWithoutResponse);
     device->service->writeCharacteristic(device->high, csrhigh, QLowEnergyService::WriteWithoutResponse);
+    return true;
 }
 
-void HaloBluetooth::writePacket(const QBluetoothUuid& uuid, const QByteArray& packet)
+bool HaloBluetooth::writePacket(const QBluetoothUuid& uuid, const QByteArray& packet)
 {
     auto it = std::find_if(mDevices.begin(), mDevices.end(),
                            [&uuid](const auto& other) {
@@ -254,14 +310,45 @@ void HaloBluetooth::writePacket(const QBluetoothUuid& uuid, const QByteArray& pa
                            });
     if (it == mDevices.end()) {
         qDebug() << "no device to write to";
-        return;
+        return false;
     }
 
-    writePacket(&*it, packet);
+    return writePacket(&*it, packet);
+}
+
+void HaloBluetooth::writePendingPackets()
+{
+    for (const auto& packet : mPendingPackets) {
+        for (auto& dev : mDevices) {
+            if (dev.ready) {
+                writePacket(&dev, packet);
+            } else {
+                // shouldn't happen
+                return;
+            }
+        }
+    }
+    mPendingPackets.clear();
 }
 
 void HaloBluetooth::writePacket(const QByteArray& packet)
 {
+    bool allReady = true;
+    for (auto& dev : mDevices) {
+        if (!dev.connected) {
+            qDebug() << "reconnecting" << dev.info.deviceUuid();
+            dev.controller->connectToDevice();
+            allReady = false;
+        } else if (!dev.ready) {
+            allReady = false;
+        }
+    }
+    if (!allReady) {
+        mPendingPackets.append(packet);
+        return;
+    }
+
+    //qDebug() << "num devices" << mDevices.size();
     for (auto& device : mDevices) {
         writePacket(&device, packet);
     }
