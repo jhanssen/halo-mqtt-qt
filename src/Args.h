@@ -121,7 +121,7 @@ inline size_t Args::freeformSize() const
 
 inline QString Args::freeformValue(size_t idx) const
 {
-    if (idx >= mFreeform.size())
+    if (static_cast<qsizetype>(idx) >= mFreeform.size())
         return QString();
     return mFreeform[idx];
 }

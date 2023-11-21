@@ -15,6 +15,10 @@ target_compile_features(halo-qt PRIVATE cxx_std_20)
 set_property(TARGET halo-qt PROPERTY COMPILE_WARNING_AS_ERROR ON)
 set_property(TARGET halo-qt PROPERTY AUTOMOC ON)
 
+target_compile_options(halo-qt PRIVATE
+  -Wall -Wextra -Wpedantic -Wno-unused-parameter
+)
+
 set_target_properties(halo-qt PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
