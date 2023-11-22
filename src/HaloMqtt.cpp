@@ -173,7 +173,7 @@ void HaloMqtt::mqttErrorChanged(QMqttClient::ClientError error)
     if (mPendingConnect) {
         mPendingConnect = false;
         // increase the backoff
-        mConnectBackoff = std::min<uint32_t>(10000, mConnectBackoff ? (mConnectBackoff * mConnectBackoff) : 100);
+        mConnectBackoff = std::min<uint32_t>(10000, mConnectBackoff ? (mConnectBackoff * 5) : 100);
         QTimer::singleShot(mConnectBackoff, this, &HaloMqtt::reconnect);
     }
 }

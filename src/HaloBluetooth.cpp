@@ -117,6 +117,7 @@ void HaloBluetooth::deviceConnected()
     ++it->connectCount;
     it->connecting = false;
     it->connected = true;
+    it->connectBackoff = 0;
 }
 
 void HaloBluetooth::deviceDisconnected()
@@ -151,7 +152,25 @@ void HaloBluetooth::deviceErrorOccurred(QLowEnergyController::Error error)
         qDebug() << "no device for error?";
         return;
     }
-    it->connecting = false;
+    if (it->connecting && !it->connected) {
+        it->connecting = false;
+        // reconnect later
+        it->connectBackoff = std::min<uint32_t>(30000, it->connectBackoff ? it->connectBackoff * 5 : 100);
+        QTimer::singleShot(it->connectBackoff, [this, controller]() {
+            auto sit = std::find_if(mDevices.begin(), mDevices.end(),
+                                    [controller](const auto& other) {
+                                        return controller == other.controller;
+                                    });
+            if (sit == mDevices.end()) {
+                qDebug() << "no device for backoff reconnect?";
+                return;
+            }
+            if (!sit->connecting && !sit->connected) {
+                sit->connecting = true;
+                controller->connectToDevice();
+            }
+        });
+    }
 }
 
 void HaloBluetooth::deviceServiceDiscovered(const QBluetoothUuid& service)
