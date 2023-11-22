@@ -219,7 +219,7 @@ void HaloMqtt::mqttMessageReceived(const QMqttMessage& message)
             return;
         }
 
-        qDebug() << "device" << locationId << deviceId;
+        // qDebug() << "device" << locationId << deviceId;
 
         auto msgobj = doc.object();
         std::optional<bool> state;
@@ -234,8 +234,7 @@ void HaloMqtt::mqttMessageReceived(const QMqttMessage& message)
         if (msgobj.contains("color_temp")) {
             colorTemp = static_cast<uint32_t>(1000000.f / msgobj.value("color_temp").toDouble());
         }
-        qDebug() << "mqtt message" << state.value_or(false) << brightness.value_or(0) << colorTemp.value_or(0);
-        qDebug() << "mqtt message" << doc.toJson();
+        qDebug() << "mqtt message" << doc.toJson() << "for" << locationId << deviceId;
 
         auto& info = mInfos[deviceId];
         if (state.value_or(false) && !brightness.has_value() && info.brightness == 0) {
