@@ -94,6 +94,7 @@ void HaloBluetooth::addDevice(const QBluetoothDeviceInfo& info)
                      this, &HaloBluetooth::deviceConnected);
     QObject::connect(dev.controller, &QLowEnergyController::disconnected,
                      this, &HaloBluetooth::deviceDisconnected);
+    dev.connecting = true;
     dev.controller->connectToDevice();
 
     mDevices.append(std::move(dev));
@@ -102,7 +103,6 @@ void HaloBluetooth::addDevice(const QBluetoothDeviceInfo& info)
 void HaloBluetooth::deviceConnected()
 {
     auto controller = static_cast<QLowEnergyController*>(sender());
-    controller->discoverServices();
 
     auto it = std::find_if(mDevices.begin(), mDevices.end(),
                            [controller](const auto& other) {
@@ -113,7 +113,9 @@ void HaloBluetooth::deviceConnected()
         return;
     }
 
+    controller->discoverServices();
     ++it->connectCount;
+    it->connecting = false;
     it->connected = true;
 }
 
@@ -131,14 +133,25 @@ void HaloBluetooth::deviceDisconnected()
         return;
     }
 
-    it->ready = it->connected = false;
+    it->ready = it->connecting = it->connected = false;
     it->service->deleteLater();
     it->service = nullptr;
 }
 
 void HaloBluetooth::deviceErrorOccurred(QLowEnergyController::Error error)
 {
+    auto controller = static_cast<QLowEnergyController*>(sender());
     qDebug() << "device error" << error;
+
+    auto it = std::find_if(mDevices.begin(), mDevices.end(),
+                           [controller](const auto& other) {
+                               return controller == other.controller;
+                           });
+    if (it == mDevices.end()) {
+        qDebug() << "no device for error?";
+        return;
+    }
+    it->connecting = false;
 }
 
 void HaloBluetooth::deviceServiceDiscovered(const QBluetoothUuid& service)
@@ -345,7 +358,10 @@ void HaloBluetooth::writePacket(const QByteArray& packet)
     for (auto& dev : mDevices) {
         if (!dev.connected) {
             qDebug() << "reconnecting" << dev.info.deviceUuid();
-            dev.controller->connectToDevice();
+            if (!dev.connecting) {
+                dev.connecting = true;
+                dev.controller->connectToDevice();
+            }
             allReady = false;
         } else if (!dev.ready) {
             allReady = false;

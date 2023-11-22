@@ -62,7 +62,7 @@ private:
         QLowEnergyService* service = nullptr;
         QLowEnergyCharacteristic low = {}, high = {};
         uint32_t connectCount = 0;
-        bool connected = false, ready = false;
+        bool connected = false, connecting = false, ready = false;
     };
 
     void writePendingPackets();
