@@ -102,6 +102,8 @@ void HaloMqtt::publishDeviceState(uint32_t locationId, uint8_t deviceId, uint8_t
         return;
     }
 
+    qDebug() << "publishing device state" << locationId << deviceId << state;
+
     auto id = mClient->publish(QString::fromUtf8(deviceTopic), state, 1, true);
     mPendingSends.append(id);
 }

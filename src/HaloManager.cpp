@@ -78,7 +78,7 @@ void HaloManager::devicesReady()
         // mBluetooth->setBrightness(dev.did, 200);
         // mBluetooth->setColorTemperature(dev.did, 5000);
         mMqtt->publishDevice(location->id, dev);
-        mMqtt->publishDeviceState(location->id, dev.did, 200, 5000);
+        mMqtt->publishDeviceState(location->id, dev.did, 255, 3333);
     }
 }
 
