@@ -33,6 +33,7 @@ HaloManager::HaloManager(Options&& options, QObject* parent)
     mBluetooth->initialize();
 
     mMqtt = new HaloMqtt(mOptions);
+    QObject::connect(mMqtt, &HaloMqtt::connected, this, &HaloManager::mqttConnected);
     QObject::connect(mMqtt, &HaloMqtt::stateRequested, this, &HaloManager::mqttStateRequested);
     QObject::connect(mMqtt, &HaloMqtt::idle, this, &HaloManager::mqttIdle);
     mMqtt->connect();
@@ -51,7 +52,7 @@ void HaloManager::quit()
     }
     mQuitting = true;
     const auto location = mBluetooth->firstLocation();
-    if (location->devices.isEmpty()) {
+    if (location->devices.isEmpty() || !mMqtt->isConnected()) {
         QCoreApplication::instance()->quit();
     } else {
         for (const auto& dev : location->devices) {
@@ -73,6 +74,26 @@ void HaloManager::bluetoothError(HaloBluetooth::Error error)
 void HaloManager::devicesReady()
 {
     qDebug() << "devices are ready";
+    mDevicesReady = true;
+    if (!mMqtt->isConnected()) {
+        qDebug() << "- mqtt not connected";
+        return;
+    }
+    const auto location = mBluetooth->firstLocation();
+    for (const auto& dev : location->devices) {
+        // mBluetooth->setBrightness(dev.did, 200);
+        // mBluetooth->setColorTemperature(dev.did, 5000);
+        mMqtt->publishDevice(location->id, dev);
+        mMqtt->publishDeviceState(location->id, dev.did, 255, 3333);
+    }
+}
+
+void HaloManager::mqttConnected()
+{
+    if (!mDevicesReady) {
+        return;
+    }
+    qDebug() << "republishing devices to mqtt";
     const auto location = mBluetooth->firstLocation();
     for (const auto& dev : location->devices) {
         // mBluetooth->setBrightness(dev.did, 200);

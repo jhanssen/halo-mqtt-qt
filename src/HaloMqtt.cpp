@@ -9,22 +9,30 @@ static const char* stateTopic = "halomqtt/light/state";
 static const char* devicePrefix = "halomqtt_";
 
 HaloMqtt::HaloMqtt(const Options& options, QObject* parent)
-    : QObject(parent)
+    : QObject(parent), mOptions(options)
 {
-    mClient = new QMqttClient(this);
-    mClient->setHostname(options.mqttHost);
-    mClient->setUsername(options.mqttUser);
-    mClient->setPassword(options.mqttPassword);
-    mClient->setPort(options.mqttPort);
-    QObject::connect(mClient, &QMqttClient::connected, this, &HaloMqtt::mqttConnected);
-    QObject::connect(mClient, &QMqttClient::disconnected, this, &HaloMqtt::mqttDisconnected);
-    QObject::connect(mClient, &QMqttClient::errorChanged, this, &HaloMqtt::mqttErrorChanged);
-    QObject::connect(mClient, &QMqttClient::messageSent, this, &HaloMqtt::mqttMessageSent);
+    recreateClient();
 }
 
 HaloMqtt::~HaloMqtt()
 {
     delete mClient;
+}
+
+void HaloMqtt::recreateClient()
+{
+    if (mClient) {
+        mClient->deleteLater();
+    }
+    mClient = new QMqttClient(this);
+    mClient->setHostname(mOptions.mqttHost);
+    mClient->setUsername(mOptions.mqttUser);
+    mClient->setPassword(mOptions.mqttPassword);
+    mClient->setPort(mOptions.mqttPort);
+    QObject::connect(mClient, &QMqttClient::connected, this, &HaloMqtt::mqttConnected);
+    QObject::connect(mClient, &QMqttClient::disconnected, this, &HaloMqtt::mqttDisconnected);
+    QObject::connect(mClient, &QMqttClient::errorChanged, this, &HaloMqtt::mqttErrorChanged);
+    QObject::connect(mClient, &QMqttClient::messageSent, this, &HaloMqtt::mqttMessageSent);
 }
 
 void HaloMqtt::connect()
@@ -115,6 +123,8 @@ void HaloMqtt::mqttConnected()
     mConnected = true;
     mSubscription = mClient->subscribe(QLatin1String(commandTopic) + "/+");
     QObject::connect(mSubscription, &QMqttSubscription::messageReceived, this, &HaloMqtt::mqttMessageReceived);
+
+    emit connected();
 }
 
 void HaloMqtt::mqttDisconnected()
@@ -123,14 +133,19 @@ void HaloMqtt::mqttDisconnected()
         QObject::disconnect(mSubscription, &QMqttSubscription::messageReceived, this, &HaloMqtt::mqttMessageReceived);
     }
 
+    const bool wasConnected = mConnected;
     mConnected = false;
     mSubscription = nullptr;
 
     qDebug() << "mqtt disconnected";
 
     mPendingSends.clear();
-    mConnectBackoff = 0;
-    reconnect();
+    if (wasConnected) {
+        mConnectBackoff = 0;
+    }
+
+    mConnectBackoff = std::min<uint32_t>(10000, mConnectBackoff ? (mConnectBackoff * 5) : 100);
+    QTimer::singleShot(mConnectBackoff, this, &HaloMqtt::reconnectNow);
 }
 
 void HaloMqtt::sendPendingPublishes()
@@ -143,12 +158,10 @@ void HaloMqtt::sendPendingPublishes()
     mPendingPublish.clear();
 }
 
-void HaloMqtt::reconnect()
+void HaloMqtt::reconnectNow()
 {
-    if (mPendingConnect) {
-        return;
-    }
-    mPendingConnect = true;
+    qDebug() << "attempting to reconnect";
+    recreateClient();
     mClient->connectToHost();
 }
 
@@ -169,13 +182,6 @@ void HaloMqtt::mqttMessageSent(qint32 id)
 void HaloMqtt::mqttErrorChanged(QMqttClient::ClientError error)
 {
     qDebug() << "mqtt error" << error;
-    // try to reconnect?
-    if (mPendingConnect) {
-        mPendingConnect = false;
-        // increase the backoff
-        mConnectBackoff = std::min<uint32_t>(10000, mConnectBackoff ? (mConnectBackoff * 5) : 100);
-        QTimer::singleShot(mConnectBackoff, this, &HaloMqtt::reconnect);
-    }
 }
 
 void HaloMqtt::mqttMessageReceived(const QMqttMessage& message)

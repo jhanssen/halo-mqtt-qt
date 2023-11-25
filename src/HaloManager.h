@@ -19,6 +19,7 @@ private slots:
     void bluetoothReady();
     void bluetoothError(HaloBluetooth::Error error);
     void devicesReady();
+    void mqttConnected();
     void mqttStateRequested(uint32_t locationId, uint8_t deviceId, std::optional<uint8_t> brightness, std::optional<uint32_t> temperature);
     void mqttIdle();
 
@@ -26,5 +27,5 @@ private:
     Options mOptions;
     HaloBluetooth* mBluetooth = nullptr;
     HaloMqtt* mMqtt = nullptr;
-    bool mQuitting = false;
+    bool mQuitting = false, mDevicesReady = false;
 };

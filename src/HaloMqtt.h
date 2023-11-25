@@ -19,6 +19,7 @@ public:
     ~HaloMqtt();
 
     void connect();
+    bool isConnected() const { return mConnected; }
 
     void publishDevice(uint32_t locationId, const Device& device);
     void unpublishDevice(uint32_t locationId, uint8_t deviceId);
@@ -27,6 +28,7 @@ public:
 signals:
     void idle();
     void stateRequested(uint32_t locationId, uint8_t deviceId, std::optional<uint8_t> brightness, std::optional<uint32_t> temperature);
+    void connected();
 
 private slots:
     void mqttConnected();
@@ -34,9 +36,10 @@ private slots:
     void mqttMessageReceived(const QMqttMessage& message);
     void mqttErrorChanged(QMqttClient::ClientError error);
     void mqttMessageSent(qint32 id);
-    void reconnect();
+    void reconnectNow();
 
 private:
+    void recreateClient();
     void sendPendingPublishes();
 
 private:
@@ -46,12 +49,12 @@ private:
         uint32_t colorTemp = 0;
     };
 
-    QMqttClient* mClient;
+    Options mOptions;
+    QMqttClient* mClient = nullptr;
     QMqttSubscription* mSubscription = nullptr;
     QList<DeviceInfo> mInfos;
     QList<std::pair<QString, QByteArray>> mPendingPublish;
     QList<qint32> mPendingSends;
     bool mConnected = false;
-    bool mPendingConnect = false;
     uint32_t mConnectBackoff = 0;
 };
