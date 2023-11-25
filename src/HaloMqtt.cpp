@@ -22,6 +22,10 @@ HaloMqtt::~HaloMqtt()
 void HaloMqtt::recreateClient()
 {
     if (mClient) {
+        QObject::disconnect(mClient, &QMqttClient::connected, this, &HaloMqtt::mqttConnected);
+        QObject::disconnect(mClient, &QMqttClient::disconnected, this, &HaloMqtt::mqttDisconnected);
+        QObject::disconnect(mClient, &QMqttClient::errorChanged, this, &HaloMqtt::mqttErrorChanged);
+        QObject::disconnect(mClient, &QMqttClient::messageSent, this, &HaloMqtt::mqttMessageSent);
         mClient->deleteLater();
     }
     mClient = new QMqttClient(this);
