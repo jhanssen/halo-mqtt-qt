@@ -26,9 +26,13 @@ void HaloMqtt::recreateClient()
     }
     mClient = new QMqttClient(this);
     mClient->setHostname(mOptions.mqttHost);
-    mClient->setUsername(mOptions.mqttUser);
-    mClient->setPassword(mOptions.mqttPassword);
     mClient->setPort(mOptions.mqttPort);
+    if (!mOptions.mqttUser.isEmpty()) {
+        mClient->setUsername(mOptions.mqttUser);
+    }
+    if (!mOptions.mqttPassword.isEmpty()) {
+        mClient->setPassword(mOptions.mqttPassword);
+    }
     QObject::connect(mClient, &QMqttClient::connected, this, &HaloMqtt::mqttConnected);
     QObject::connect(mClient, &QMqttClient::disconnected, this, &HaloMqtt::mqttDisconnected);
     QObject::connect(mClient, &QMqttClient::errorChanged, this, &HaloMqtt::mqttErrorChanged);

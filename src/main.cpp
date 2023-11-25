@@ -82,12 +82,6 @@ int main(int argc, char** argv, char** envp)
     } else if (options.devices.isEmpty()) {
         fprintf(stderr, "No --devices\n");
         exit(1);
-    } else if (options.mqttUser.isEmpty()) {
-        fprintf(stderr, "No --mqtt-user\n");
-        exit(1);
-    } else if (options.mqttPassword.isEmpty()) {
-        fprintf(stderr, "No --mqtt-password\n");
-        exit(1);
     } else if (options.mqttHost.isEmpty()) {
         fprintf(stderr, "No --mqtt-host\n");
         exit(1);
