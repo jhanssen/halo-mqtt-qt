@@ -65,12 +65,27 @@ void HaloBluetooth::startDiscovery()
 
 void HaloBluetooth::addDevice(const QBluetoothDeviceInfo& info)
 {
+    auto recreateController = [this](InternalDevice& idev) {
+        idev.controller = QLowEnergyController::createCentral(idev.info, this);
+        QObject::connect(idev.controller, &QLowEnergyController::serviceDiscovered,
+                         this, &HaloBluetooth::deviceServiceDiscovered);
+        QObject::connect(idev.controller, &QLowEnergyController::errorOccurred,
+                         this, &HaloBluetooth::deviceErrorOccurred);
+        QObject::connect(idev.controller, &QLowEnergyController::connected,
+                         this, &HaloBluetooth::deviceConnected);
+        QObject::connect(idev.controller, &QLowEnergyController::disconnected,
+                         this, &HaloBluetooth::deviceDisconnected);
+    };
+
     auto dit = std::find_if(mDevices.begin(), mDevices.end(),
                             [&info](const auto& other) {
                                 return info.deviceUuid() == other.info.deviceUuid();
                             });
     if (dit != mDevices.end()) {
         // already added?
+        if (!dit->controller) {
+            recreateController(*dit);
+        }
         return;
     }
 
@@ -85,15 +100,7 @@ void HaloBluetooth::addDevice(const QBluetoothDeviceInfo& info)
         info,
     };
 
-    dev.controller = QLowEnergyController::createCentral(info, this);
-    QObject::connect(dev.controller, &QLowEnergyController::serviceDiscovered,
-                     this, &HaloBluetooth::deviceServiceDiscovered);
-    QObject::connect(dev.controller, &QLowEnergyController::errorOccurred,
-                     this, &HaloBluetooth::deviceErrorOccurred);
-    QObject::connect(dev.controller, &QLowEnergyController::connected,
-                     this, &HaloBluetooth::deviceConnected);
-    QObject::connect(dev.controller, &QLowEnergyController::disconnected,
-                     this, &HaloBluetooth::deviceDisconnected);
+    recreateController(dev);
     dev.connecting = true;
     dev.controller->connectToDevice();
 
@@ -135,8 +142,24 @@ void HaloBluetooth::deviceDisconnected()
     }
 
     it->ready = it->connecting = it->connected = false;
+
+    QObject::disconnect(it->service, &QLowEnergyService::stateChanged, this, &HaloBluetooth::serviceStateChanged);
+    QObject::disconnect(it->service, &QLowEnergyService::errorOccurred, this, &HaloBluetooth::serviceErrorOccurred);
+    QObject::disconnect(it->service, &QLowEnergyService::characteristicChanged, this, &HaloBluetooth::serviceCharacteristicChanged);
+    QObject::disconnect(it->service, &QLowEnergyService::descriptorWritten, this, &HaloBluetooth::serviceDescriptorWritten);
     it->service->deleteLater();
     it->service = nullptr;
+
+    QObject::disconnect(it->controller, &QLowEnergyController::serviceDiscovered,
+                        this, &HaloBluetooth::deviceServiceDiscovered);
+    QObject::disconnect(it->controller, &QLowEnergyController::errorOccurred,
+                        this, &HaloBluetooth::deviceErrorOccurred);
+    QObject::disconnect(it->controller, &QLowEnergyController::connected,
+                        this, &HaloBluetooth::deviceConnected);
+    QObject::disconnect(it->controller, &QLowEnergyController::disconnected,
+                        this, &HaloBluetooth::deviceDisconnected);
+    it->controller->deleteLater();
+    it->controller = nullptr;
 }
 
 void HaloBluetooth::deviceErrorOccurred(QLowEnergyController::Error error)
@@ -166,6 +189,7 @@ void HaloBluetooth::deviceErrorOccurred(QLowEnergyController::Error error)
                 return;
             }
             if (!sit->connecting && !sit->connected) {
+                addDevice(sit->info);
                 sit->connecting = true;
                 controller->connectToDevice();
             }
@@ -194,10 +218,10 @@ void HaloBluetooth::deviceServiceDiscovered(const QBluetoothUuid& service)
             return;
         }
 
-        connect(serviceObject, &QLowEnergyService::stateChanged, this, &HaloBluetooth::serviceStateChanged);
-        connect(serviceObject, &QLowEnergyService::errorOccurred, this, &HaloBluetooth::serviceErrorOccurred);
-        connect(serviceObject, &QLowEnergyService::characteristicChanged, this, &HaloBluetooth::serviceCharacteristicChanged);
-        connect(serviceObject, &QLowEnergyService::descriptorWritten, this, &HaloBluetooth::serviceDescriptorWritten);
+        QObject::connect(serviceObject, &QLowEnergyService::stateChanged, this, &HaloBluetooth::serviceStateChanged);
+        QObject::connect(serviceObject, &QLowEnergyService::errorOccurred, this, &HaloBluetooth::serviceErrorOccurred);
+        QObject::connect(serviceObject, &QLowEnergyService::characteristicChanged, this, &HaloBluetooth::serviceCharacteristicChanged);
+        QObject::connect(serviceObject, &QLowEnergyService::descriptorWritten, this, &HaloBluetooth::serviceDescriptorWritten);
         serviceObject->discoverDetails();
 
         it->service = serviceObject;
@@ -379,6 +403,7 @@ void HaloBluetooth::writePacket(const QByteArray& packet)
             qDebug() << "reconnecting" << dev.info.deviceUuid();
             if (!dev.connecting) {
                 dev.connecting = true;
+                addDevice(dev.info);
                 dev.controller->connectToDevice();
             }
             allReady = false;
