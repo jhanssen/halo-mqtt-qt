@@ -67,6 +67,7 @@ private:
 
     void writePendingPackets();
     void scheduleNextPacket();
+    void rediscover();
 
 private:
     uint32_t mDeviceDelay;

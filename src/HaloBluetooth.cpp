@@ -57,6 +57,19 @@ void HaloBluetooth::initialize()
     }
 }
 
+void HaloBluetooth::rediscover()
+{
+    if (mDiscoveryAgent) {
+        QObject::disconnect(mDiscoveryAgent, &QBluetoothDeviceDiscoveryAgent::deviceDiscovered,
+                            this, &HaloBluetooth::deviceDiscovered);
+        mDiscoveryAgent->deleteLater();
+    }
+    mDiscoveryAgent = new QBluetoothDeviceDiscoveryAgent(this);
+    QObject::connect(mDiscoveryAgent, &QBluetoothDeviceDiscoveryAgent::deviceDiscovered,
+                     this, &HaloBluetooth::deviceDiscovered);
+    mDiscoveryAgent->start(QBluetoothDeviceDiscoveryAgent::LowEnergyMethod);
+}
+
 void HaloBluetooth::startDiscovery()
 {
     // qDebug() << "discovering";
@@ -85,6 +98,8 @@ void HaloBluetooth::addDevice(const QBluetoothDeviceInfo& info)
         // already added?
         if (!dit->controller) {
             recreateController(*dit);
+            dit->connecting = true;
+            dit->controller->connectToDevice();
         }
         return;
     }
@@ -190,8 +205,10 @@ void HaloBluetooth::deviceErrorOccurred(QLowEnergyController::Error error)
             }
             if (!sit->connecting && !sit->connected) {
                 addDevice(sit->info);
-                sit->connecting = true;
-                controller->connectToDevice();
+                if (!sit->connecting) {
+                    sit->connecting = true;
+                    controller->connectToDevice();
+                }
             }
         });
     }
@@ -397,19 +414,27 @@ void HaloBluetooth::writePacketInternal(const QByteArray& packet)
 
 void HaloBluetooth::writePacket(const QByteArray& packet)
 {
-    bool allReady = true;
+    bool allReady = true, anyConnected = false;
     for (auto& dev : mDevices) {
         if (!dev.connected) {
             qDebug() << "reconnecting" << dev.info.deviceUuid();
             if (!dev.connecting) {
-                dev.connecting = true;
                 addDevice(dev.info);
-                dev.controller->connectToDevice();
+                if (!dev.connecting) {
+                    dev.connecting = true;
+                    dev.controller->connectToDevice();
+                }
             }
             allReady = false;
         } else if (!dev.ready) {
             allReady = false;
+            anyConnected = true;
+        } else {
+            anyConnected = true;
         }
+    }
+    if (!anyConnected) {
+        rediscover();
     }
     if (!allReady || mWritingPacket) {
         mPendingPackets.append(packet);
